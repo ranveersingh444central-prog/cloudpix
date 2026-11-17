@@ -17,7 +17,7 @@ import { AssetInspector } from '@/components/AssetInspector';
 import { UploadModal } from '@/components/UploadModal';
 import { ConnectionModal } from '@/components/ConnectionModal';
 import { CommandPalette } from '@/components/CommandPalette';
-import { ArrowLeft, Trash2, Copy, CheckSquare, Sparkles } from 'lucide-react';
+import { ArrowLeft, Trash2, Copy, CheckSquare, Search, X } from 'lucide-react';
 
 function CloudPixDashboard() {
   const { toast } = useToast();
@@ -88,13 +88,13 @@ function CloudPixDashboard() {
       const data: VerificationResult = await res.json();
       setVerification(data);
       return data;
-    } catch (err: any) {
+    } catch (err: unknown) {
       const failedResult: VerificationResult = {
         connected: false,
         cloudName: cfgToVerify.cloudName,
         accountType: cfgToVerify.isDemoMode ? 'demo' : 'live',
         latencyMs: 0,
-        statusMessage: err?.message || 'Connection test failed',
+        statusMessage: (err as Error)?.message || 'Connection test failed',
         checkedAt: new Date().toISOString(),
       };
       setVerification(failedResult);
@@ -251,7 +251,6 @@ function CloudPixDashboard() {
         assetCount={filteredAssets.length}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
-        onOpenStudioFromHeader={() => handleOpenStudio()}
       />
 
       {/* Main Content Area */}
@@ -304,6 +303,35 @@ function CloudPixDashboard() {
 
           {/* Center Main Stage */}
           <main className="flex-1 min-w-0 p-4 sm:p-6 space-y-4 overflow-y-auto">
+            {/* Filter and Quick Search Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-1 border-b border-border/60">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Filter current view..."
+                  className="w-full pl-8 pr-7 py-1.5 bg-background border border-border rounded-lg text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Showing</span>
+                <span className="font-mono font-medium text-foreground">{filteredAssets.length}</span>
+                <span>of</span>
+                <span className="font-mono text-muted-foreground">{assets.length} assets</span>
+              </div>
+            </div>
+
             {/* Batch Action Bar if items selected */}
             {selectedIds.length > 0 && (
               <div className="flex items-center justify-between p-3 rounded-lg bg-card border border-primary/40 shadow-sm animate-fade-in text-xs">
@@ -393,7 +421,6 @@ function CloudPixDashboard() {
         onOpenUpload={() => setIsUploadOpen(true)}
         onOpenConnection={() => setIsConnectionOpen(true)}
         onSetViewMode={(mode) => setViewMode(mode)}
-        onSelectFolder={(f) => setActiveFolder(f)}
         onToggleTheme={() => setDarkMode((prev) => !prev)}
       />
     </div>
