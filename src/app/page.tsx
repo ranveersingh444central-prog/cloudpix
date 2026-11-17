@@ -1,101 +1,409 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { 
+  CloudinaryAsset, 
+  CloudinaryConfig, 
+  VerificationResult 
+} from '@/types/cloudinary';
+import { INITIAL_ASSETS, DEFAULT_CLOUD_NAME } from '@/lib/constants';
+import { ToastProvider, useToast } from '@/components/Toast';
+import { Header } from '@/components/Header';
+import { Sidebar } from '@/components/Sidebar';
+import { AssetGrid } from '@/components/AssetGrid';
+import { AssetTable } from '@/components/AssetTable';
+import { TransformationStudio } from '@/components/TransformationStudio';
+import { AssetInspector } from '@/components/AssetInspector';
+import { UploadModal } from '@/components/UploadModal';
+import { ConnectionModal } from '@/components/ConnectionModal';
+import { CommandPalette } from '@/components/CommandPalette';
+import { ArrowLeft, Trash2, Copy, CheckSquare, Sparkles } from 'lucide-react';
+
+function CloudPixDashboard() {
+  const { toast } = useToast();
+
+  // App Configuration
+  const [config, setConfig] = useState<CloudinaryConfig>({
+    cloudName: DEFAULT_CLOUD_NAME,
+    isConfigured: true,
+    isDemoMode: true,
+  });
+
+  // State
+  const [assets, setAssets] = useState<CloudinaryAsset[]>(INITIAL_ASSETS);
+  const [verification, setVerification] = useState<VerificationResult | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [activeFolder, setActiveFolder] = useState<string>('All');
+  const [activeFormat, setActiveFormat] = useState<string>('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  
+  // Modals & Panels
+  const [inspectingAsset, setInspectingAsset] = useState<CloudinaryAsset | null>(null);
+  const [studioAsset, setStudioAsset] = useState<CloudinaryAsset | null>(null);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isConnectionOpen, setIsConnectionOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
+
+  // Sync dark mode class
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  // Load config from localStorage
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('cloudpix_cloudinary_config');
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig);
+        setConfig(parsed);
+      } catch (e) {
+        console.error('Failed to parse saved config', e);
+      }
+    }
+  }, []);
+
+  // Verification function
+  const verifyConnection = useCallback(async (cfgToVerify: CloudinaryConfig): Promise<VerificationResult | null> => {
+    setIsVerifying(true);
+    try {
+      const res = await fetch('/api/cloudinary/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-cloudinary-cloud-name': cfgToVerify.cloudName,
+          ...(cfgToVerify.apiKey ? { 'x-cloudinary-api-key': cfgToVerify.apiKey } : {}),
+          ...(cfgToVerify.apiSecret ? { 'x-cloudinary-api-secret': cfgToVerify.apiSecret } : {}),
+        },
+        body: JSON.stringify(cfgToVerify),
+      });
+
+      const data: VerificationResult = await res.json();
+      setVerification(data);
+      return data;
+    } catch (err: any) {
+      const failedResult: VerificationResult = {
+        connected: false,
+        cloudName: cfgToVerify.cloudName,
+        accountType: cfgToVerify.isDemoMode ? 'demo' : 'live',
+        latencyMs: 0,
+        statusMessage: err?.message || 'Connection test failed',
+        checkedAt: new Date().toISOString(),
+      };
+      setVerification(failedResult);
+      return failedResult;
+    } finally {
+      setIsVerifying(false);
+    }
+  }, []);
+
+  // Initial verification on mount
+  useEffect(() => {
+    verifyConnection(config);
+  }, [verifyConnection, config]);
+
+  // Save new configuration
+  const handleSaveConfig = async (newConfig: CloudinaryConfig) => {
+    setConfig(newConfig);
+    localStorage.setItem('cloudpix_cloudinary_config', JSON.stringify(newConfig));
+    const result = await verifyConnection(newConfig);
+    return result;
+  };
+
+  // Keyboard Shortcuts (⌘K, G, L, U, Esc)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is inside an input, textarea, or select
+      const activeElement = document.activeElement;
+      const isInput =
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement;
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        setIsUploadOpen(false);
+        setIsConnectionOpen(false);
+        setIsCommandPaletteOpen(false);
+        setInspectingAsset(null);
+        return;
+      }
+
+      if (!isInput && !isUploadOpen && !isConnectionOpen && !isCommandPaletteOpen) {
+        if (e.key.toLowerCase() === 'g') {
+          setViewMode('grid');
+        } else if (e.key.toLowerCase() === 'l') {
+          setViewMode('table');
+        } else if (e.key.toLowerCase() === 'u') {
+          e.preventDefault();
+          setIsUploadOpen(true);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isUploadOpen, isConnectionOpen, isCommandPaletteOpen]);
+
+  // Filter Assets
+  const filteredAssets = useMemo(() => {
+    return assets.filter((asset) => {
+      // Folder filter
+      if (activeFolder !== 'All' && asset.folder !== activeFolder) {
+        return false;
+      }
+      // Format filter
+      if (activeFormat !== 'All' && asset.format.toLowerCase() !== activeFormat.toLowerCase()) {
+        return false;
+      }
+      // Search filter
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const matchesName = asset.filename.toLowerCase().includes(query);
+        const matchesPublicId = asset.public_id.toLowerCase().includes(query);
+        const matchesTags = asset.tags.some((t) => t.toLowerCase().includes(query));
+        if (!matchesName && !matchesPublicId && !matchesTags) return false;
+      }
+      return true;
+    });
+  }, [assets, activeFolder, activeFormat, searchQuery]);
+
+  // Total Bytes
+  const totalBytes = useMemo(() => {
+    return assets.reduce((sum, item) => sum + item.bytes, 0);
+  }, [assets]);
+
+  // Selection handlers
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === filteredAssets.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredAssets.map((a) => a.id));
+    }
+  };
+
+  // Batch actions
+  const handleBatchCopyUrls = () => {
+    const urls = assets
+      .filter((a) => selectedIds.includes(a.id))
+      .map((a) => a.secure_url || a.url)
+      .join('\n');
+    navigator.clipboard.writeText(urls);
+    toast(`Copied ${selectedIds.length} CDN URLs`, 'success');
+  };
+
+  const handleBatchDelete = () => {
+    setAssets((prev) => prev.filter((a) => !selectedIds.includes(a.id)));
+    toast(`Deleted ${selectedIds.length} assets`, 'info');
+    setSelectedIds([]);
+  };
+
+  // Asset deletion
+  const handleDeleteAsset = (assetId: string) => {
+    setAssets((prev) => prev.filter((a) => a.id !== assetId));
+  };
+
+  // Asset uploaded
+  const handleAssetUploaded = (newAsset: CloudinaryAsset) => {
+    setAssets((prev) => [newAsset, ...prev]);
+  };
+
+  // Open Transformation Studio for an asset
+  const handleOpenStudio = (asset?: CloudinaryAsset) => {
+    const targetAsset = asset || inspectingAsset || assets[0];
+    if (targetAsset) {
+      setStudioAsset(targetAsset);
+      setIsStudioOpen(true);
+      setInspectingAsset(null);
+    }
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+      {/* Top Navigation */}
+      <Header
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        onOpenUpload={() => setIsUploadOpen(true)}
+        onOpenConnection={() => setIsConnectionOpen(true)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        verification={verification}
+        config={config}
+        activeFolder={activeFolder}
+        assetCount={filteredAssets.length}
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+        onOpenStudioFromHeader={() => handleOpenStudio()}
+      />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Main Content Area */}
+      {isStudioOpen && studioAsset ? (
+        // TRANSFORMATION STUDIO WORKSPACE VIEW
+        <div className="flex-1 flex flex-col">
+          {/* Studio Top Return Bar */}
+          <div className="h-10 border-b border-border bg-card/60 px-4 sm:px-6 flex items-center justify-between text-xs">
+            <button
+              onClick={() => setIsStudioOpen(false)}
+              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors font-medium"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Asset Library</span>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground font-mono">Active Cloud:</span>
+              <span className="font-mono px-2 py-0.5 rounded bg-muted text-foreground text-[11px] font-semibold">
+                {config.cloudName}
+              </span>
+            </div>
+          </div>
+
+          {/* Transformation Studio Component */}
+          <TransformationStudio
+            asset={studioAsset}
+            config={config}
+            onClose={() => setIsStudioOpen(false)}
+          />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+      ) : (
+        // ASSET LIBRARY / DAM VIEW
+        <div className="flex-1 flex">
+          {/* Left Sidebar */}
+          <Sidebar
+            activeFolder={activeFolder}
+            setActiveFolder={setActiveFolder}
+            activeFormat={activeFormat}
+            setActiveFormat={setActiveFormat}
+            totalAssetsCount={assets.length}
+            totalBytes={totalBytes}
+            config={config}
+            verification={verification}
+            onOpenConnection={() => setIsConnectionOpen(true)}
+            onVerifyNow={() => verifyConnection(config)}
+            isVerifying={isVerifying}
+            onOpenStudio={() => handleOpenStudio()}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+          {/* Center Main Stage */}
+          <main className="flex-1 min-w-0 p-4 sm:p-6 space-y-4 overflow-y-auto">
+            {/* Batch Action Bar if items selected */}
+            {selectedIds.length > 0 && (
+              <div className="flex items-center justify-between p-3 rounded-lg bg-card border border-primary/40 shadow-sm animate-fade-in text-xs">
+                <div className="flex items-center gap-2">
+                  <CheckSquare className="w-4 h-4 text-primary" />
+                  <span className="font-medium text-foreground">
+                    {selectedIds.length} asset{selectedIds.length > 1 ? 's' : ''} selected
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleBatchCopyUrls}
+                    className="px-2.5 py-1.5 rounded-md border border-border hover:bg-muted text-foreground flex items-center gap-1.5 transition-colors"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    Copy URLs
+                  </button>
+                  <button
+                    onClick={handleBatchDelete}
+                    className="px-2.5 py-1.5 rounded-md bg-rose-500/10 text-rose-500 border border-rose-500/20 hover:bg-rose-500/20 flex items-center gap-1.5 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete Selected
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Content View: Grid or Table */}
+            {viewMode === 'grid' ? (
+              <AssetGrid
+                assets={filteredAssets}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onInspect={(asset) => setInspectingAsset(asset)}
+                onOpenStudio={(asset) => handleOpenStudio(asset)}
+              />
+            ) : (
+              <AssetTable
+                assets={filteredAssets}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onToggleSelectAll={handleToggleSelectAll}
+                onInspect={(asset) => setInspectingAsset(asset)}
+                onOpenStudio={(asset) => handleOpenStudio(asset)}
+              />
+            )}
+          </main>
+
+          {/* Right Slide-over Inspector */}
+          {inspectingAsset && (
+            <AssetInspector
+              asset={inspectingAsset}
+              onClose={() => setInspectingAsset(null)}
+              onOpenStudio={(asset) => handleOpenStudio(asset)}
+              onDeleteAsset={handleDeleteAsset}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      <UploadModal
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        config={config}
+        onAssetUploaded={handleAssetUploaded}
+      />
+
+      {/* Cloudinary Connection & Verification Modal */}
+      <ConnectionModal
+        isOpen={isConnectionOpen}
+        onClose={() => setIsConnectionOpen(false)}
+        config={config}
+        verification={verification}
+        onSaveConfig={handleSaveConfig}
+        isVerifying={isVerifying}
+      />
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        assets={assets}
+        onSelectAsset={(asset) => setInspectingAsset(asset)}
+        onOpenStudio={(asset) => handleOpenStudio(asset)}
+        onOpenUpload={() => setIsUploadOpen(true)}
+        onOpenConnection={() => setIsConnectionOpen(true)}
+        onSetViewMode={(mode) => setViewMode(mode)}
+        onSelectFolder={(f) => setActiveFolder(f)}
+        onToggleTheme={() => setDarkMode((prev) => !prev)}
+      />
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <ToastProvider>
+      <CloudPixDashboard />
+    </ToastProvider>
   );
 }
