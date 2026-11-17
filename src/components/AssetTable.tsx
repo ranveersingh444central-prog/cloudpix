@@ -5,6 +5,7 @@ import { CloudinaryAsset } from '@/types/cloudinary';
 import { formatBytes } from '@/lib/cloudinary';
 import { Sparkles, Info, Copy, Download } from 'lucide-react';
 import { useToast } from './Toast';
+import { CloudinaryImage } from './CloudinaryImage';
 
 interface AssetTableProps {
   assets: CloudinaryAsset[];
@@ -111,12 +112,11 @@ export function AssetTable({
                   </td>
                   <td className="py-2">
                     <div className="w-10 h-10 rounded border border-border bg-checkered overflow-hidden shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={imageUrl}
+                      <CloudinaryImage
+                        asset={asset}
                         alt={asset.filename}
-                        loading="lazy"
                         className="w-full h-full object-cover"
+                        options={{ width: 100, height: 100, crop: 'thumb' }}
                       />
                     </div>
                   </td>

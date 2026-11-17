@@ -17,6 +17,7 @@ import {
   FileCode
 } from 'lucide-react';
 import { useToast } from './Toast';
+import { CloudinaryImage } from './CloudinaryImage';
 
 interface AssetInspectorProps {
   asset: CloudinaryAsset | null;
@@ -73,13 +74,15 @@ export function AssetInspector({
       {/* Body content */}
       <div className="flex-1 overflow-y-auto p-5 space-y-6">
         {/* Visual Preview */}
-        <div className="relative rounded-lg overflow-hidden border border-border bg-checkered flex items-center justify-center p-2 group">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={asset.secure_url || asset.url}
-            alt={asset.filename}
-            className="max-h-56 w-auto object-contain rounded"
-          />
+        <div className="relative rounded-lg overflow-hidden border border-border bg-checkered flex items-center justify-center p-2 group min-h-[14rem]">
+          <div className="max-h-56 max-w-full flex items-center justify-center">
+            <CloudinaryImage
+              asset={asset}
+              alt={asset.filename}
+              className="max-h-56 w-auto object-contain rounded"
+              options={{ width: 800, crop: 'limit' }}
+            />
+          </div>
           <a
             href={asset.secure_url || asset.url}
             target="_blank"

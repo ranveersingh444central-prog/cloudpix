@@ -5,6 +5,7 @@ import { CloudinaryAsset } from '@/types/cloudinary';
 import { formatBytes } from '@/lib/cloudinary';
 import { Sparkles, Info, Copy, Download, Check } from 'lucide-react';
 import { useToast } from './Toast';
+import { CloudinaryImage } from './CloudinaryImage';
 
 interface AssetGridProps {
   assets: CloudinaryAsset[];
@@ -77,12 +78,11 @@ export function AssetGrid({
           >
             {/* Thumbnail Box */}
             <div className="relative aspect-[4/3] w-full bg-checkered overflow-hidden border-b border-border">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={imageUrl}
+              <CloudinaryImage
+                asset={asset}
                 alt={asset.filename}
-                loading="lazy"
                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                options={{ width: 600, crop: 'limit' }}
               />
 
               {/* Selection Checkbox */}

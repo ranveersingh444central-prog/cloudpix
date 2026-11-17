@@ -155,6 +155,25 @@ export const INITIAL_ASSETS: CloudinaryAsset[] = [
     dominant_colors: ['#1A365D', '#2B6CB0', '#E2E8F0', '#4A5568'],
     description: 'Dramatic alpine ridge peak under clear skies.',
   },
+  {
+    id: 'cld-9',
+    public_id: 'sample',
+    filename: 'sample.avif',
+    format: 'avif',
+    resource_type: 'image',
+    type: 'upload',
+    created_at: '2026-11-17T10:00:00Z',
+    bytes: 38310,
+    width: 864,
+    height: 576,
+    url: 'http://res.cloudinary.com/demo/image/upload/sample.avif',
+    secure_url: 'https://res.cloudinary.com/demo/image/upload/sample.avif',
+    folder: 'Marketing',
+    tags: ['avif', 'sample', 'optimized', 'flowers'],
+    aspect_ratio: '3:2',
+    dominant_colors: ['#D2B48C', '#8B4513', '#F5DEB3', '#2F4F4F'],
+    description: 'High-efficiency AVIF format sample with rich color accuracy and ultra-compact file size.',
+  },
 ];
 
 export const TRANSFORMATION_PRESETS: TransformationPreset[] = [

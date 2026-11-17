@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   CloudinaryAsset, 
   TransformationOptions, 
@@ -10,7 +10,7 @@ import {
   VisualEffect
 } from '@/types/cloudinary';
 import { TRANSFORMATION_PRESETS } from '@/lib/constants';
-import { buildCloudinaryUrl, formatBytes, estimateSavings, generateCodeSnippets } from '@/lib/cloudinary';
+import { buildCloudinaryUrl, formatBytes, estimateSavings, generateCodeSnippets, getAssetDeliveryUrls } from '@/lib/cloudinary';
 import { 
   Sliders, 
   Sparkles, 
@@ -77,9 +77,19 @@ export function TransformationStudio({
     }
   }, [asset]);
 
-  // Generate current transformed URL
+  // Progressive delivery URLs for robust preview across all formats including AVIF
+  const deliveryUrls = useMemo(() => getAssetDeliveryUrls(asset), [asset]);
   const transformedUrl = buildCloudinaryUrl(asset, options, config.cloudName);
-  const originalUrl = asset.secure_url || asset.url;
+  const [originalDisplaySrc, setOriginalDisplaySrc] = useState(deliveryUrls.fallbackUrl);
+  const [transformedDisplaySrc, setTransformedDisplaySrc] = useState(transformedUrl);
+
+  useEffect(() => {
+    setOriginalDisplaySrc(deliveryUrls.fallbackUrl);
+  }, [deliveryUrls]);
+
+  useEffect(() => {
+    setTransformedDisplaySrc(transformedUrl);
+  }, [transformedUrl]);
 
   // Calculate live savings
   const savings = estimateSavings(asset.bytes, asset.width, asset.height, options);
@@ -221,8 +231,9 @@ export function TransformationStudio({
               {/* After (Transformed) Image - Base layer */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={transformedUrl}
+                src={transformedDisplaySrc}
                 alt="Transformed"
+                onError={() => setTransformedDisplaySrc(deliveryUrls.fallbackUrl)}
                 className="block max-h-[68vh] w-auto max-w-full object-contain pointer-events-none"
               />
 
@@ -233,8 +244,9 @@ export function TransformationStudio({
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={originalUrl}
+                  src={originalDisplaySrc}
                   alt="Original"
+                  onError={() => setOriginalDisplaySrc(deliveryUrls.fallbackUrl)}
                   className="block max-h-[68vh] w-auto max-w-full object-contain"
                 />
               </div>
@@ -268,7 +280,7 @@ export function TransformationStudio({
                 </div>
                 <div className="w-full h-80 rounded bg-checkered flex items-center justify-center overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={originalUrl} alt="Original" className="max-h-full object-contain" />
+                  <img src={originalDisplaySrc} alt="Original" onError={() => setOriginalDisplaySrc(deliveryUrls.fallbackUrl)} className="max-h-full object-contain" />
                 </div>
               </div>
               <div className="border border-border rounded-lg p-2 bg-card flex flex-col items-center">
@@ -278,7 +290,7 @@ export function TransformationStudio({
                 </div>
                 <div className="w-full h-80 rounded bg-checkered flex items-center justify-center overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={transformedUrl} alt="Transformed" className="max-h-full object-contain" />
+                  <img src={transformedDisplaySrc} alt="Transformed" onError={() => setTransformedDisplaySrc(deliveryUrls.fallbackUrl)} className="max-h-full object-contain" />
                 </div>
               </div>
             </div>
@@ -288,8 +300,9 @@ export function TransformationStudio({
             <div className="max-w-full max-h-[70vh] rounded-lg overflow-hidden shadow-lg border border-border bg-checkered">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={transformedUrl}
+                src={transformedDisplaySrc}
                 alt="Transformed"
+                onError={() => setTransformedDisplaySrc(deliveryUrls.fallbackUrl)}
                 className="block max-h-[68vh] w-auto max-w-full object-contain"
               />
             </div>

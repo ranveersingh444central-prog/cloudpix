@@ -69,14 +69,66 @@ export function buildCloudinaryUrl(
 
   const transformString = parts.length > 0 ? parts.join(',') : '';
 
-  // Clean path format
+  // Clean path format & remove any redundant format extensions to enable true dynamic transformation
   const sanitizedPublicId = publicId.replace(/^\//, '');
+  const basePublicId = sanitizedPublicId.replace(/\.(avif|webp|jpg|jpeg|png|gif|svg)$/i, '');
   
+  // If an explicit target format is requested, append extension; otherwise let f_auto negotiate or deliver cleanly
+  const targetExtension = options.format && options.format !== 'auto' ? `.${options.format}` : '';
+  const finalPath = `${basePublicId}${targetExtension}`;
+
   if (transformString) {
-    return `https://res.cloudinary.com/${cloudName}/image/upload/${transformString}/${sanitizedPublicId}`;
+    return `https://res.cloudinary.com/${cloudName}/image/upload/${transformString}/${finalPath}`;
   }
 
-  return `https://res.cloudinary.com/${cloudName}/image/upload/${sanitizedPublicId}`;
+  return `https://res.cloudinary.com/${cloudName}/image/upload/${finalPath}`;
+}
+
+/**
+ * Resolves progressive delivery URLs for an asset:
+ * 1. avifUrl: Native AVIF delivery
+ * 2. webpUrl: Modern WebP delivery
+ * 3. fallbackUrl: Universal delivery with safe JPG/auto format
+ */
+export function getAssetDeliveryUrls(
+  asset: CloudinaryAsset,
+  options?: { width?: number; height?: number; crop?: string }
+): {
+  avifUrl: string;
+  webpUrl: string;
+  fallbackUrl: string;
+  rawUrl: string;
+} {
+  const rawUrl = asset.secure_url || asset.url;
+  
+  if (!rawUrl || !rawUrl.includes('res.cloudinary.com')) {
+    return {
+      avifUrl: rawUrl,
+      webpUrl: rawUrl,
+      fallbackUrl: rawUrl,
+      rawUrl,
+    };
+  }
+
+  const cloudMatch = rawUrl.match(/res\.cloudinary\.com\/([^/]+)\//);
+  const cloudName = cloudMatch ? cloudMatch[1] : DEFAULT_CLOUD_NAME;
+  const cleanPublicId = asset.public_id.replace(/^\//, '').replace(/\.(avif|webp|jpg|jpeg|png|gif|svg)$/i, '');
+
+  const widthParam = options?.width ? `w_${options.width},` : '';
+  const heightParam = options?.height ? `h_${options.height},` : '';
+  const cropParam = options?.crop ? `c_${options.crop},` : (options?.width ? 'c_limit,' : '');
+  const baseTransforms = `${cropParam}${widthParam}${heightParam}`;
+
+  const avifUrl = `https://res.cloudinary.com/${cloudName}/image/upload/${baseTransforms}f_avif,q_auto/${cleanPublicId}.avif`;
+  const webpUrl = `https://res.cloudinary.com/${cloudName}/image/upload/${baseTransforms}f_webp,q_auto/${cleanPublicId}.webp`;
+  const fallbackUrl = `https://res.cloudinary.com/${cloudName}/image/upload/${baseTransforms}f_auto,q_auto/${cleanPublicId}.jpg`;
+
+  return {
+    avifUrl,
+    webpUrl,
+    fallbackUrl,
+    rawUrl,
+  };
 }
 
 /**

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><title>AVIF Test</title></head>
+<body style="background: pink; display: flex; gap: 20px;">
+  <div>
+    <h3>1. Direct AVIF</h3>
+    <img id="img1" src="https://res.cloudinary.com/demo/image/upload/sample.avif" style="width: 200px; height: 150px; border: 2px solid red;" onerror="this.style.border='4px solid black'" />
+  </div>
+  <div>
+    <h3>2. Converted WebP</h3>
+    <img id="img2" src="https://res.cloudinary.com/demo/image/upload/f_auto,q_auto/sample.webp" style="width: 200px; height: 150px; border: 2px solid green;" />
+  </div>
+  <div>
+    <h3>3. Converted JPG</h3>
+    <img id="img3" src="https://res.cloudinary.com/demo/image/upload/f_auto,q_auto/sample.jpg" style="width: 200px; height: 150px; border: 2px solid blue;" />
+  </div>
+</body>
+</html>
