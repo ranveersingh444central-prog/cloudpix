@@ -9,13 +9,10 @@ import {
   List, 
   ShieldCheck, 
   Sun, 
-  Moon, 
-  Folder, 
   Image as ImageIcon,
   ArrowRight
 } from 'lucide-react';
 import { CloudinaryAsset } from '@/types/cloudinary';
-import { FOLDERS } from '@/lib/constants';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -26,7 +23,6 @@ interface CommandPaletteProps {
   onOpenUpload: () => void;
   onOpenConnection: () => void;
   onSetViewMode: (mode: 'grid' | 'table') => void;
-  onSelectFolder: (folder: string) => void;
   onToggleTheme: () => void;
 }
 
@@ -39,7 +35,6 @@ export function CommandPalette({
   onOpenUpload,
   onOpenConnection,
   onSetViewMode,
-  onSelectFolder,
   onToggleTheme,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('');

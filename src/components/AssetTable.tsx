@@ -3,7 +3,7 @@
 import React from 'react';
 import { CloudinaryAsset } from '@/types/cloudinary';
 import { formatBytes } from '@/lib/cloudinary';
-import { Sparkles, Info, Copy, Download, Check, ExternalLink } from 'lucide-react';
+import { Sparkles, Info, Copy, Download } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface AssetTableProps {

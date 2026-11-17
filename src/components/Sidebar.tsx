@@ -3,19 +3,16 @@
 import React from 'react';
 import { 
   Folder, 
-  Layers, 
   Sparkles, 
   ShieldCheck, 
   Filter, 
   HardDrive, 
   Zap, 
   Settings, 
-  Terminal,
-  CheckCircle2,
   RefreshCw
 } from 'lucide-react';
 import { FOLDERS, FORMATS } from '@/lib/constants';
-import { CloudinaryConfig, VerificationResult, CloudinaryAsset } from '@/types/cloudinary';
+import { CloudinaryConfig, VerificationResult } from '@/types/cloudinary';
 import { formatBytes } from '@/lib/cloudinary';
 
 interface SidebarProps {

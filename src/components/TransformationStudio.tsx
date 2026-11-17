@@ -1,7 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { CloudinaryAsset, TransformationOptions, CloudinaryConfig } from '@/types/cloudinary';
+import { 
+  CloudinaryAsset, 
+  TransformationOptions, 
+  CloudinaryConfig,
+  CropGravity,
+  DeliveryFormat,
+  VisualEffect
+} from '@/types/cloudinary';
 import { TRANSFORMATION_PRESETS } from '@/lib/constants';
 import { buildCloudinaryUrl, formatBytes, estimateSavings, generateCodeSnippets } from '@/lib/cloudinary';
 import { 
@@ -18,7 +25,6 @@ import {
   Crop as CropIcon, 
   Zap, 
   Layers,
-  ChevronDown,
   Info
 } from 'lucide-react';
 import { useToast } from './Toast';
@@ -27,7 +33,6 @@ interface TransformationStudioProps {
   asset: CloudinaryAsset;
   config: CloudinaryConfig;
   onClose?: () => void;
-  onSelectAnotherAsset?: () => void;
 }
 
 const DEFAULT_OPTIONS: TransformationOptions = {
@@ -50,8 +55,6 @@ const DEFAULT_OPTIONS: TransformationOptions = {
 export function TransformationStudio({
   asset,
   config,
-  onClose,
-  onSelectAnotherAsset,
 }: TransformationStudioProps) {
   const { toast } = useToast();
   const [options, setOptions] = useState<TransformationOptions>(DEFAULT_OPTIONS);
@@ -94,7 +97,6 @@ export function TransformationStudio({
   };
 
   const handleMouseDown = () => setIsDraggingSlider(true);
-  const handleMouseUp = () => setIsDraggingSlider(false);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -343,7 +345,7 @@ export function TransformationStudio({
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as 'presets' | 'geometry' | 'optimization' | 'effects' | 'export')}
                 className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-md transition-all border-b-2 ${
                   activeTab === tab.id
                     ? 'border-primary text-foreground bg-card'
@@ -400,7 +402,7 @@ export function TransformationStudio({
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setOptions({ ...options, gravity: item.id as any })}
+                    onClick={() => setOptions({ ...options, gravity: item.id as CropGravity })}
                     className={`py-1.5 px-2 rounded-md text-xs border text-center transition-all ${
                       options.gravity === item.id
                         ? 'border-primary bg-primary/10 text-primary font-medium'
@@ -520,7 +522,7 @@ export function TransformationStudio({
                   <button
                     key={fmt.id}
                     type="button"
-                    onClick={() => setOptions({ ...options, format: fmt.id as any })}
+                    onClick={() => setOptions({ ...options, format: fmt.id as DeliveryFormat })}
                     className={`py-1.5 px-2 rounded-md text-xs border text-center transition-all ${
                       options.format === fmt.id
                         ? 'border-primary bg-primary/10 text-primary font-medium'
@@ -551,7 +553,7 @@ export function TransformationStudio({
                   <button
                     key={q.id}
                     type="button"
-                    onClick={() => setOptions({ ...options, quality: q.id as any })}
+                    onClick={() => setOptions({ ...options, quality: q.id as TransformationOptions['quality'] })}
                     className={`py-1.5 px-2 rounded-md text-xs border text-center transition-all ${
                       options.quality === q.id
                         ? 'border-primary bg-primary/10 text-primary font-medium'
@@ -571,7 +573,7 @@ export function TransformationStudio({
                   <button
                     key={dprVal}
                     type="button"
-                    onClick={() => setOptions({ ...options, dpr: dprVal as any })}
+                    onClick={() => setOptions({ ...options, dpr: dprVal as TransformationOptions['dpr'] })}
                     className={`py-1.5 px-2 rounded-md text-xs font-mono border text-center transition-all ${
                       options.dpr === dprVal
                         ? 'border-primary bg-primary/10 text-primary font-medium'
@@ -603,7 +605,7 @@ export function TransformationStudio({
                   <button
                     key={eff.id}
                     type="button"
-                    onClick={() => setOptions({ ...options, effect: eff.id as any })}
+                    onClick={() => setOptions({ ...options, effect: eff.id as VisualEffect })}
                     className={`py-1.5 px-2 rounded-md text-xs border text-center transition-all ${
                       options.effect === eff.id
                         ? 'border-primary bg-primary/10 text-primary font-medium'
@@ -633,7 +635,7 @@ export function TransformationStudio({
                     <span className="text-[10px] text-muted-foreground mb-1 block">Position</span>
                     <select
                       value={options.overlayPosition || 'south_east'}
-                      onChange={(e) => setOptions({ ...options, overlayPosition: e.target.value as any })}
+                      onChange={(e) => setOptions({ ...options, overlayPosition: e.target.value as TransformationOptions['overlayPosition'] })}
                       className="w-full px-2 py-1 bg-background border border-border rounded-md text-xs"
                     >
                       <option value="south_east">Bottom Right</option>
@@ -700,7 +702,7 @@ export function TransformationStudio({
               ].map((fmt) => (
                 <button
                   key={fmt.id}
-                  onClick={() => setSelectedSnippet(fmt.id as any)}
+                  onClick={() => setSelectedSnippet(fmt.id as 'url' | 'html' | 'nextjs' | 'reactCld' | 'markdown')}
                   className={`flex-1 py-1 rounded text-center transition-all ${
                     selectedSnippet === fmt.id
                       ? 'bg-card text-foreground font-medium shadow-xs'

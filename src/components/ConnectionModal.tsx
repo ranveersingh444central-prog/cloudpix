@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { CloudinaryConfig, VerificationResult } from '@/types/cloudinary';
-import { X, CheckCircle2, AlertCircle, RefreshCw, Key, ShieldCheck, ExternalLink } from 'lucide-react';
+import { X, CheckCircle2, RefreshCw, Key, ShieldCheck, ExternalLink } from 'lucide-react';
 import { useToast } from './Toast';
 
 interface ConnectionModalProps {
@@ -248,7 +248,7 @@ export function ConnectionModal({
                 Cloudinary Public Demo Cloud
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Uses Cloudinary's global public sandbox (<code className="font-mono text-foreground">cloud_name: demo</code>). 
+                Uses Cloudinary&apos;s global public sandbox (<code className="font-mono text-foreground">cloud_name: demo</code>). 
                 All dynamic transformations (AI face detect, smart cropping, WebP/AVIF compression, overlays, effects) work immediately without needing an API key.
               </p>
             </div>

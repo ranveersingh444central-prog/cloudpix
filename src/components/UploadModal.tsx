@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { X, UploadCloud, Link as LinkIcon, Image as ImageIcon, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { X, UploadCloud, Link as LinkIcon, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { CloudinaryAsset, CloudinaryConfig } from '@/types/cloudinary';
 import { FOLDERS } from '@/lib/constants';
 import { formatBytes } from '@/lib/cloudinary';
@@ -116,8 +116,8 @@ export function UploadModal({
         }
         setIsUploading(false);
       };
-    } catch (err: any) {
-      toast(err?.message || 'Error processing file', 'error');
+    } catch (err: unknown) {
+      toast((err as Error)?.message || 'Error processing file', 'error');
       setIsUploading(false);
     }
   };
@@ -157,8 +157,8 @@ export function UploadModal({
       } else {
         toast(data.error || 'Failed to import URL', 'error');
       }
-    } catch (err: any) {
-      toast(err?.message || 'Error importing URL', 'error');
+    } catch (err: unknown) {
+      toast((err as Error)?.message || 'Error importing URL', 'error');
     } finally {
       setIsUploading(false);
     }

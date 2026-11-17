@@ -3,6 +3,21 @@ import { v2 as cloudinary } from 'cloudinary';
 import { INITIAL_ASSETS } from '@/lib/constants';
 import { CloudinaryAsset } from '@/types/cloudinary';
 
+interface CloudinaryApiResource {
+  public_id: string;
+  format: string;
+  version?: number;
+  resource_type?: 'image' | 'video' | 'raw';
+  type?: string;
+  created_at: string;
+  bytes: number;
+  width: number;
+  height: number;
+  url: string;
+  secure_url: string;
+  tags?: string[];
+}
+
 export async function GET(req: NextRequest) {
   try {
     const cloudName = 
@@ -36,7 +51,7 @@ export async function GET(req: NextRequest) {
           direction: 'desc',
         });
 
-        const liveAssets: CloudinaryAsset[] = response.resources.map((res: any, idx: number) => {
+        const liveAssets: CloudinaryAsset[] = response.resources.map((res: CloudinaryApiResource, idx: number) => {
           const width = res.width || 1200;
           const height = res.height || 800;
           const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
@@ -69,16 +84,16 @@ export async function GET(req: NextRequest) {
         if (liveAssets.length > 0) {
           return NextResponse.json({ assets: liveAssets, source: 'live' });
         }
-      } catch (adminError: any) {
-        console.warn('Could not query live resources from Cloudinary Admin API, falling back to sample library:', adminError.message);
+      } catch (adminError: unknown) {
+        console.warn('Could not query live resources from Cloudinary Admin API, falling back to sample library:', (adminError as Error)?.message);
       }
     }
 
     // Default: Return initial sample library
     return NextResponse.json({ assets: INITIAL_ASSETS, source: 'sample' });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error?.message || 'Failed to fetch assets', assets: INITIAL_ASSETS, source: 'sample' },
+      { error: (error as Error)?.message || 'Failed to fetch assets', assets: INITIAL_ASSETS, source: 'sample' },
       { status: 500 }
     );
   }

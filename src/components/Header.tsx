@@ -6,12 +6,8 @@ import {
   List, 
   Upload, 
   Search, 
-  ShieldCheck, 
   Sun, 
   Moon, 
-  Layers, 
-  Terminal,
-  Sparkles,
   Cloud
 } from 'lucide-react';
 import { VerificationResult, CloudinaryConfig } from '@/types/cloudinary';
@@ -28,7 +24,6 @@ interface HeaderProps {
   assetCount: number;
   darkMode: boolean;
   setDarkMode: (val: boolean) => void;
-  onOpenStudioFromHeader?: () => void;
 }
 
 export function Header({
@@ -43,7 +38,6 @@ export function Header({
   assetCount,
   darkMode,
   setDarkMode,
-  onOpenStudioFromHeader,
 }: HeaderProps) {
   return (
     <header className="h-14 border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-6 flex items-center justify-between gap-4">

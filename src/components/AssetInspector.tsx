@@ -14,7 +14,6 @@ import {
   Tag, 
   Folder, 
   Calendar, 
-  Maximize2,
   FileCode
 } from 'lucide-react';
 import { useToast } from './Toast';

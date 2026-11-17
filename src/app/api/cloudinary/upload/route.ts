@@ -64,7 +64,6 @@ export async function POST(req: NextRequest) {
     }
 
     // Demo/Sandbox fallback:
-    // If the file is a remote URL or data URL in demo mode:
     const mockPublicId = `samples/${folder.toLowerCase()}/${filename.replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now().toString().slice(-4)}`;
     
     // Estimate image attributes for the sandbox
@@ -82,8 +81,8 @@ export async function POST(req: NextRequest) {
       bytes: isDataUrl ? Math.round(file.length * 0.75) : 850000,
       width: 1920,
       height: 1080,
-      url: isDataUrl ? file : file,
-      secure_url: isDataUrl ? file : file,
+      url: file,
+      secure_url: file,
       folder,
       tags: [...tags, 'uploaded'],
       aspect_ratio: '16:9',
@@ -95,9 +94,9 @@ export async function POST(req: NextRequest) {
       asset: newAsset,
       note: 'Processed in CloudPix sandbox mode. Provide API Key & Secret in settings for persistent direct cloud storage.',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error?.message || 'Failed to upload asset to Cloudinary' },
+      { error: (error as Error)?.message || 'Failed to upload asset to Cloudinary' },
       { status: 500 }
     );
   }

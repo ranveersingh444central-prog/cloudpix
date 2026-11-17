@@ -37,9 +37,9 @@ export async function POST(req: NextRequest) {
 
     // In demo / sandbox mode, return successful deletion from current session
     return NextResponse.json({ success: true, result: 'ok', demo: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error?.message || 'Failed to delete asset from Cloudinary' },
+      { error: (error as Error)?.message || 'Failed to delete asset from Cloudinary' },
       { status: 500 }
     );
   }

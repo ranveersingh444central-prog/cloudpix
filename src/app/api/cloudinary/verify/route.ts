@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     const latencyMs = Date.now() - startTime;
     return NextResponse.json(
       {
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
         cloudName: 'unknown',
         accountType: 'live',
         latencyMs,
-        statusMessage: error?.message || 'Failed to connect to Cloudinary endpoint',
+        statusMessage: (error as Error)?.message || 'Failed to connect to Cloudinary endpoint',
         checkedAt: new Date().toISOString(),
       },
       { status: 500 }
