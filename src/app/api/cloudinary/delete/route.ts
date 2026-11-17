@@ -1,29 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
+import { parseSessionCookie } from '@/lib/session';
 
 export async function POST(req: NextRequest) {
   try {
-    const { public_id } = await req.json();
+    const { public_id, isDemoMode } = await req.json();
 
     if (!public_id) {
       return NextResponse.json({ error: 'Missing public_id' }, { status: 400 });
     }
 
+    if (isDemoMode) {
+      return NextResponse.json({ success: true, result: 'ok', demo: true });
+    }
+
+    const sessionCookie = parseSessionCookie(req);
+
     const cloudName = 
-      req.headers.get('x-cloudinary-cloud-name') || 
-      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 
       process.env.CLOUDINARY_CLOUD_NAME || 
-      'demo';
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 
+      sessionCookie?.cloudName;
 
     const apiKey = 
-      req.headers.get('x-cloudinary-api-key') || 
-      process.env.CLOUDINARY_API_KEY;
+      process.env.CLOUDINARY_API_KEY || 
+      sessionCookie?.apiKey;
 
     const apiSecret = 
-      req.headers.get('x-cloudinary-api-secret') || 
-      process.env.CLOUDINARY_API_SECRET;
+      process.env.CLOUDINARY_API_SECRET || 
+      sessionCookie?.apiSecret;
 
-    if (apiKey && apiSecret && cloudName !== 'demo') {
+    if (apiKey && apiSecret && cloudName && cloudName !== 'demo') {
       cloudinary.config({
         cloud_name: cloudName,
         api_key: apiKey,
@@ -35,7 +41,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, result });
     }
 
-    // In demo / sandbox mode, return successful deletion from current session
+    // Demo / session fallback
     return NextResponse.json({ success: true, result: 'ok', demo: true });
   } catch (error: unknown) {
     return NextResponse.json(

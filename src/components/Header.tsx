@@ -39,6 +39,8 @@ export function Header({
   darkMode,
   setDarkMode,
 }: HeaderProps) {
+  const isDemo = config.isDemoMode || config.cloudName === 'demo';
+
   return (
     <header className="h-14 border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-6 flex items-center justify-between gap-4">
       {/* Left: Brand & Context */}
@@ -52,9 +54,15 @@ export function Header({
 
         <div className="hidden md:flex items-center text-xs text-muted-foreground gap-1.5 font-mono">
           <span className="text-border">/</span>
+          {isDemo ? (
+            <span className="text-amber-500 font-medium">Demo Mode</span>
+          ) : (
+            <span className="text-emerald-500 font-medium">Personal ({config.cloudName})</span>
+          )}
+          <span className="text-border">/</span>
           <span className="text-foreground">{activeFolder}</span>
           <span className="px-1.5 py-0.2 rounded-full bg-muted text-[10px] text-muted-foreground">
-            {assetCount}
+            {isDemo ? `Demo: ${assetCount}` : assetCount}
           </span>
         </div>
       </div>
@@ -81,23 +89,30 @@ export function Header({
         {/* Cloudinary Integration Status Pill */}
         <button
           onClick={onOpenConnection}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-background hover:bg-muted/60 text-xs transition-colors"
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors ${
+            isDemo 
+              ? 'border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-amber-500'
+              : 'border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 text-emerald-500'
+          }`}
           title="Verify Cloudinary Integration & API Settings"
         >
           {verification?.connected ? (
             <>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-mono text-[11px] hidden md:inline text-foreground">
+              <span className={`w-2 h-2 rounded-full animate-pulse ${isDemo ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+              <span className="font-mono text-[10px] uppercase font-semibold px-1 rounded bg-muted/80">
+                {isDemo ? 'Demo Mode' : 'Personal Cloud'}
+              </span>
+              <span className="font-mono text-[11px] hidden md:inline text-foreground font-medium">
                 {config.cloudName}
               </span>
-              <span className="text-[10px] text-emerald-500 font-mono hidden lg:inline">
+              <span className="text-[10px] font-mono hidden lg:inline opacity-80">
                 ({verification.latencyMs}ms)
               </span>
             </>
           ) : (
             <>
-              <span className="w-2 h-2 rounded-full bg-amber-500" />
-              <span className="text-[11px] text-muted-foreground font-mono">Unverified</span>
+              <span className="w-2 h-2 rounded-full bg-rose-500" />
+              <span className="text-[11px] text-rose-500 font-mono">Disconnected</span>
             </>
           )}
         </button>

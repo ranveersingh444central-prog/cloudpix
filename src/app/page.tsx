@@ -22,7 +22,7 @@ import { ArrowLeft, Trash2, Copy, CheckSquare, Search, X } from 'lucide-react';
 function CloudPixDashboard() {
   const { toast } = useToast();
 
-  // App Configuration
+  // App Configuration - Non-sensitive state only
   const [config, setConfig] = useState<CloudinaryConfig>({
     cloudName: DEFAULT_CLOUD_NAME,
     isConfigured: true,
@@ -57,20 +57,27 @@ function CloudPixDashboard() {
     }
   }, [darkMode]);
 
-  // Load config from localStorage
-  useEffect(() => {
-    const savedConfig = localStorage.getItem('cloudpix_cloudinary_config');
-    if (savedConfig) {
-      try {
-        const parsed = JSON.parse(savedConfig);
-        setConfig(parsed);
-      } catch (e) {
-        console.error('Failed to parse saved config', e);
+  // Load assets based on current mode
+  const loadAssets = useCallback(async (currentConfig: CloudinaryConfig) => {
+    try {
+      const mode = currentConfig.isDemoMode ? 'demo' : 'personal';
+      const cloudParam = currentConfig.cloudName ? `&cloudName=${encodeURIComponent(currentConfig.cloudName)}` : '';
+      const res = await fetch(`/api/cloudinary/assets?mode=${mode}${cloudParam}`);
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.assets)) {
+        setAssets(data.assets);
+      } else if (data.assets) {
+        setAssets(data.assets);
+      }
+    } catch {
+      // Fallback to sample assets in case of offline/network failure
+      if (currentConfig.isDemoMode) {
+        setAssets(INITIAL_ASSETS);
       }
     }
   }, []);
 
-  // Verification function
+  // Verification function (checks server session or env vars)
   const verifyConnection = useCallback(async (cfgToVerify: CloudinaryConfig): Promise<VerificationResult | null> => {
     setIsVerifying(true);
     try {
@@ -78,11 +85,11 @@ function CloudPixDashboard() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-cloudinary-cloud-name': cfgToVerify.cloudName,
-          ...(cfgToVerify.apiKey ? { 'x-cloudinary-api-key': cfgToVerify.apiKey } : {}),
-          ...(cfgToVerify.apiSecret ? { 'x-cloudinary-api-secret': cfgToVerify.apiSecret } : {}),
         },
-        body: JSON.stringify(cfgToVerify),
+        body: JSON.stringify({
+          cloudName: cfgToVerify.cloudName,
+          isDemoMode: cfgToVerify.isDemoMode,
+        }),
       });
 
       const data: VerificationResult = await res.json();
@@ -104,23 +111,95 @@ function CloudPixDashboard() {
     }
   }, []);
 
-  // Initial verification on mount
+  // Initialize and sanitize localStorage on mount (CRITICAL SECURITY: Strip any previous secrets)
   useEffect(() => {
-    verifyConnection(config);
-  }, [verifyConnection, config]);
+    const savedConfig = localStorage.getItem('cloudpix_cloudinary_config');
+    let initialConfig: CloudinaryConfig = {
+      cloudName: DEFAULT_CLOUD_NAME,
+      isConfigured: true,
+      isDemoMode: true,
+    };
 
-  // Save new configuration
-  const handleSaveConfig = async (newConfig: CloudinaryConfig) => {
-    setConfig(newConfig);
-    localStorage.setItem('cloudpix_cloudinary_config', JSON.stringify(newConfig));
-    const result = await verifyConnection(newConfig);
-    return result;
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig);
+        // SECURITY ENFORCEMENT: Remove any legacy secrets
+        delete parsed.apiKey;
+        delete parsed.apiSecret;
+
+        initialConfig = {
+          cloudName: parsed.cloudName || DEFAULT_CLOUD_NAME,
+          uploadPreset: parsed.uploadPreset || '',
+          isConfigured: parsed.isConfigured !== false,
+          isDemoMode: parsed.isDemoMode !== false,
+        };
+        // Re-persist only safe configuration
+        localStorage.setItem('cloudpix_cloudinary_config', JSON.stringify(initialConfig));
+      } catch (e) {
+        console.error('Failed to parse saved config', e);
+      }
+    }
+
+    setConfig(initialConfig);
+    verifyConnection(initialConfig);
+    loadAssets(initialConfig);
+  }, [verifyConnection, loadAssets]);
+
+  // Save new configuration securely
+  const handleSaveConfig = async (params: {
+    cloudName: string;
+    apiKey?: string;
+    apiSecret?: string;
+    uploadPreset?: string;
+    isDemoMode: boolean;
+  }): Promise<VerificationResult | null> => {
+    setIsVerifying(true);
+    try {
+      const res = await fetch('/api/cloudinary/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      const data: VerificationResult = await res.json();
+      setVerification(data);
+
+      if (data.connected) {
+        // SECURITY: Never save API secret to client storage
+        const safeConfig: CloudinaryConfig = {
+          cloudName: data.cloudName,
+          uploadPreset: params.uploadPreset || '',
+          isConfigured: true,
+          isDemoMode: params.isDemoMode,
+          hasServerCredentials: data.hasServerEnv,
+        };
+        setConfig(safeConfig);
+        localStorage.setItem('cloudpix_cloudinary_config', JSON.stringify(safeConfig));
+        // Reload assets for the newly active mode
+        loadAssets(safeConfig);
+      }
+      return data;
+    } catch (err: unknown) {
+      const failedResult: VerificationResult = {
+        connected: false,
+        cloudName: params.cloudName,
+        accountType: params.isDemoMode ? 'demo' : 'live',
+        latencyMs: 0,
+        statusMessage: (err as Error)?.message || 'Connection test failed',
+        checkedAt: new Date().toISOString(),
+      };
+      setVerification(failedResult);
+      return failedResult;
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   // Keyboard Shortcuts (⌘K, G, L, U, Esc)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is inside an input, textarea, or select
       const activeElement = document.activeElement;
       const isInput =
         activeElement instanceof HTMLInputElement ||
@@ -210,14 +289,34 @@ function CloudPixDashboard() {
     toast(`Copied ${selectedIds.length} CDN URLs`, 'success');
   };
 
-  const handleBatchDelete = () => {
+  const handleBatchDelete = async () => {
+    const count = selectedIds.length;
+    // Delete through API
+    for (const id of selectedIds) {
+      const asset = assets.find((a) => a.id === id);
+      if (asset) {
+        await fetch('/api/cloudinary/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ public_id: asset.public_id, isDemoMode: config.isDemoMode }),
+        }).catch(() => {});
+      }
+    }
     setAssets((prev) => prev.filter((a) => !selectedIds.includes(a.id)));
-    toast(`Deleted ${selectedIds.length} assets`, 'info');
+    toast(`Deleted ${count} assets`, 'info');
     setSelectedIds([]);
   };
 
   // Asset deletion
-  const handleDeleteAsset = (assetId: string) => {
+  const handleDeleteAsset = async (assetId: string) => {
+    const asset = assets.find((a) => a.id === assetId);
+    if (asset) {
+      await fetch('/api/cloudinary/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ public_id: asset.public_id, isDemoMode: config.isDemoMode }),
+      }).catch(() => {});
+    }
     setAssets((prev) => prev.filter((a) => a.id !== assetId));
   };
 
@@ -269,8 +368,8 @@ function CloudPixDashboard() {
 
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground font-mono">Active Cloud:</span>
-              <span className="font-mono px-2 py-0.5 rounded bg-muted text-foreground text-[11px] font-semibold">
-                {config.cloudName}
+              <span className={`font-mono px-2 py-0.5 rounded text-[11px] font-semibold ${config.isDemoMode ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                {config.cloudName} {config.isDemoMode ? '(Demo)' : '(Personal)'}
               </span>
             </div>
           </div>
@@ -328,7 +427,9 @@ function CloudPixDashboard() {
                 <span>Showing</span>
                 <span className="font-mono font-medium text-foreground">{filteredAssets.length}</span>
                 <span>of</span>
-                <span className="font-mono text-muted-foreground">{assets.length} assets</span>
+                <span className="font-mono text-muted-foreground">
+                  {config.isDemoMode ? `${assets.length} demo assets` : `${assets.length} assets`}
+                </span>
               </div>
             </div>
 
@@ -368,6 +469,9 @@ function CloudPixDashboard() {
                 onToggleSelect={handleToggleSelect}
                 onInspect={(asset) => setInspectingAsset(asset)}
                 onOpenStudio={(asset) => handleOpenStudio(asset)}
+                isPersonalMode={!config.isDemoMode}
+                cloudName={config.cloudName}
+                onOpenUpload={() => setIsUploadOpen(true)}
               />
             ) : (
               <AssetTable
@@ -377,6 +481,9 @@ function CloudPixDashboard() {
                 onToggleSelectAll={handleToggleSelectAll}
                 onInspect={(asset) => setInspectingAsset(asset)}
                 onOpenStudio={(asset) => handleOpenStudio(asset)}
+                isPersonalMode={!config.isDemoMode}
+                cloudName={config.cloudName}
+                onOpenUpload={() => setIsUploadOpen(true)}
               />
             )}
           </main>
@@ -399,6 +506,7 @@ function CloudPixDashboard() {
         onClose={() => setIsUploadOpen(false)}
         config={config}
         onAssetUploaded={handleAssetUploaded}
+        onOpenSettings={() => setIsConnectionOpen(true)}
       />
 
       {/* Cloudinary Connection & Verification Modal */}

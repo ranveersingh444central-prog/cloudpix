@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 import { INITIAL_ASSETS } from '@/lib/constants';
 import { CloudinaryAsset } from '@/types/cloudinary';
+import { parseSessionCookie } from '@/lib/session';
 
 interface CloudinaryApiResource {
   public_id: string;
@@ -20,22 +21,51 @@ interface CloudinaryApiResource {
 
 export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const requestedMode = searchParams.get('mode'); // 'personal' or 'demo'
+    const sessionCookie = parseSessionCookie(req);
+
+    const isDemoMode = requestedMode === 'demo';
+
+    // 1. Explicit Demo Mode requested
+    if (isDemoMode) {
+      return NextResponse.json({ 
+        assets: INITIAL_ASSETS, 
+        source: 'demo',
+        totalBytes: INITIAL_ASSETS.reduce((sum, item) => sum + item.bytes, 0)
+      });
+    }
+
+    // 2. Personal Mode: Resolve credentials
     const cloudName = 
-      req.headers.get('x-cloudinary-cloud-name') || 
-      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 
+      searchParams.get('cloudName') || 
       process.env.CLOUDINARY_CLOUD_NAME || 
-      'demo';
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 
+      sessionCookie?.cloudName;
 
     const apiKey = 
-      req.headers.get('x-cloudinary-api-key') || 
-      process.env.CLOUDINARY_API_KEY;
+      process.env.CLOUDINARY_API_KEY || 
+      sessionCookie?.apiKey;
 
     const apiSecret = 
-      req.headers.get('x-cloudinary-api-secret') || 
-      process.env.CLOUDINARY_API_SECRET;
+      process.env.CLOUDINARY_API_SECRET || 
+      sessionCookie?.apiSecret;
 
-    // If live credentials are provided and not demo, try querying Cloudinary Admin API
-    if (apiKey && apiSecret && cloudName !== 'demo') {
+    // If personal mode was requested but credentials are missing
+    if (requestedMode === 'personal' && (!apiKey || !apiSecret || !cloudName || cloudName === 'demo')) {
+      return NextResponse.json(
+        { 
+          error: 'Missing Cloudinary configuration: API Key and API Secret are required to fetch personal assets.',
+          assets: [], 
+          source: 'personal',
+          isConfigMissing: true
+        },
+        { status: 400 }
+      );
+    }
+
+    // If live credentials are valid and available, query Cloudinary Admin API
+    if (apiKey && apiSecret && cloudName && cloudName !== 'demo') {
       cloudinary.config({
         cloud_name: cloudName,
         api_key: apiKey,
@@ -51,7 +81,7 @@ export async function GET(req: NextRequest) {
           direction: 'desc',
         });
 
-        const liveAssets: CloudinaryAsset[] = response.resources.map((res: CloudinaryApiResource, idx: number) => {
+        const liveAssets: CloudinaryAsset[] = (response.resources || []).map((res: CloudinaryApiResource, idx: number) => {
           const width = res.width || 1200;
           const height = res.height || 800;
           const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
@@ -81,19 +111,36 @@ export async function GET(req: NextRequest) {
           };
         });
 
-        if (liveAssets.length > 0) {
-          return NextResponse.json({ assets: liveAssets, source: 'live' });
-        }
+        // Return personal assets (even if 0, do NOT substitute with demo assets!)
+        return NextResponse.json({ 
+          assets: liveAssets, 
+          source: 'personal',
+          cloudName,
+          totalBytes: liveAssets.reduce((sum, item) => sum + item.bytes, 0)
+        });
       } catch (adminError: unknown) {
-        console.warn('Could not query live resources from Cloudinary Admin API, falling back to sample library:', (adminError as Error)?.message);
+        const message = (adminError as Error)?.message || 'Failed to fetch resources from Cloudinary Admin API';
+        return NextResponse.json(
+          { 
+            error: message, 
+            assets: [], 
+            source: 'personal',
+            cloudName 
+          },
+          { status: 400 }
+        );
       }
     }
 
-    // Default: Return initial sample library
-    return NextResponse.json({ assets: INITIAL_ASSETS, source: 'sample' });
+    // Default when no personal credentials configured: Return demo catalog
+    return NextResponse.json({ 
+      assets: INITIAL_ASSETS, 
+      source: 'demo',
+      totalBytes: INITIAL_ASSETS.reduce((sum, item) => sum + item.bytes, 0)
+    });
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: (error as Error)?.message || 'Failed to fetch assets', assets: INITIAL_ASSETS, source: 'sample' },
+      { error: (error as Error)?.message || 'Failed to fetch assets', assets: [], source: 'error' },
       { status: 500 }
     );
   }

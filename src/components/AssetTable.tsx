@@ -13,6 +13,9 @@ interface AssetTableProps {
   onToggleSelectAll: () => void;
   onInspect: (asset: CloudinaryAsset) => void;
   onOpenStudio: (asset: CloudinaryAsset) => void;
+  isPersonalMode?: boolean;
+  cloudName?: string;
+  onOpenUpload?: () => void;
 }
 
 export function AssetTable({
@@ -22,6 +25,9 @@ export function AssetTable({
   onToggleSelectAll,
   onInspect,
   onOpenStudio,
+  isPersonalMode,
+  cloudName,
+  onOpenUpload,
 }: AssetTableProps) {
   const { toast } = useToast();
   const allSelected = assets.length > 0 && selectedIds.length === assets.length;
@@ -38,10 +44,22 @@ export function AssetTable({
         <div className="w-12 h-12 rounded-xl bg-muted border border-border flex items-center justify-center text-muted-foreground mb-3">
           <Info className="w-6 h-6" />
         </div>
-        <h3 className="text-sm font-semibold text-foreground mb-1">No assets found</h3>
-        <p className="text-xs text-muted-foreground max-w-sm">
-          No media matches your current folder or search query.
+        <h3 className="text-sm font-semibold text-foreground mb-1">
+          {isPersonalMode ? `No assets found in '${cloudName}'` : 'No assets found'}
+        </h3>
+        <p className="text-xs text-muted-foreground max-w-sm mb-4">
+          {isPersonalMode 
+            ? 'Your personal Cloudinary account is connected. Upload assets to start organizing and transforming your cloud media.'
+            : 'No media matches your current folder or search query.'}
         </p>
+        {isPersonalMode && onOpenUpload && (
+          <button
+            onClick={onOpenUpload}
+            className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-all shadow-xs"
+          >
+            Upload to {cloudName}
+          </button>
+        )}
       </div>
     );
   }

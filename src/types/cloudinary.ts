@@ -58,11 +58,11 @@ export interface TransformationOptions {
 
 export interface CloudinaryConfig {
   cloudName: string;
-  apiKey?: string;
-  apiSecret?: string;
   uploadPreset?: string;
   isConfigured: boolean;
   isDemoMode: boolean;
+  hasServerCredentials?: boolean;
+  apiKeyMasked?: string;
 }
 
 export interface VerificationResult {
@@ -72,6 +72,7 @@ export interface VerificationResult {
   latencyMs: number;
   statusMessage: string;
   checkedAt: string;
+  hasServerEnv?: boolean;
   details?: {
     plan?: string;
     creditsUsage?: number;

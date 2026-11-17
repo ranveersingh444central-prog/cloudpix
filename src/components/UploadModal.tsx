@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { X, UploadCloud, Link as LinkIcon, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { X, UploadCloud, Link as LinkIcon, Image as ImageIcon, Loader2, AlertCircle } from 'lucide-react';
 import { CloudinaryAsset, CloudinaryConfig } from '@/types/cloudinary';
 import { FOLDERS } from '@/lib/constants';
 import { formatBytes } from '@/lib/cloudinary';
@@ -12,6 +12,7 @@ interface UploadModalProps {
   onClose: () => void;
   config: CloudinaryConfig;
   onAssetUploaded: (newAsset: CloudinaryAsset) => void;
+  onOpenSettings?: () => void;
 }
 
 export function UploadModal({
@@ -19,6 +20,7 @@ export function UploadModal({
   onClose,
   config,
   onAssetUploaded,
+  onOpenSettings,
 }: UploadModalProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'file' | 'url'>('file');
@@ -29,9 +31,12 @@ export function UploadModal({
   const [folder, setFolder] = useState<string>('Marketing');
   const [tagsInput, setTagsInput] = useState<string>('production, web');
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  const isDemo = config.isDemoMode || config.cloudName === 'demo';
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -60,6 +65,7 @@ export function UploadModal({
   };
 
   const processSelectedFile = (file: File) => {
+    setUploadError(null);
     if (!file.type.startsWith('image/')) {
       toast('Please upload an image file (JPEG, PNG, WebP, AVIF, SVG)', 'error');
       return;
@@ -79,8 +85,9 @@ export function UploadModal({
     if (!selectedFile) return;
 
     setIsUploading(true);
+    setUploadError(null);
+
     try {
-      // Convert file to base64
       const reader = new FileReader();
       reader.readAsDataURL(selectedFile);
       reader.onload = async () => {
@@ -94,30 +101,31 @@ export function UploadModal({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-cloudinary-cloud-name': config.cloudName,
-            ...(config.apiKey ? { 'x-cloudinary-api-key': config.apiKey } : {}),
-            ...(config.apiSecret ? { 'x-cloudinary-api-secret': config.apiSecret } : {}),
           },
           body: JSON.stringify({
             file: base64Data,
             folder: folder || 'General',
             tags,
             filename: selectedFile.name.replace(/\.[^/.]+$/, ''),
+            isDemoMode: isDemo,
           }),
         });
 
         const data = await res.json();
         if (res.ok && data.asset) {
-          toast(`Asset '${data.asset.filename}' uploaded successfully`, 'success');
+          toast(data.message || `Asset '${data.asset.filename}' uploaded successfully`, 'success');
           onAssetUploaded(data.asset);
           handleClose();
         } else {
+          setUploadError(data.error || 'Upload failed. Check Cloudinary account configuration.');
           toast(data.error || 'Upload failed', 'error');
         }
         setIsUploading(false);
       };
     } catch (err: unknown) {
-      toast((err as Error)?.message || 'Error processing file', 'error');
+      const msg = (err as Error)?.message || 'Error processing file';
+      setUploadError(msg);
+      toast(msg, 'error');
       setIsUploading(false);
     }
   };
@@ -127,6 +135,8 @@ export function UploadModal({
     if (!imageUrl.trim()) return;
 
     setIsUploading(true);
+    setUploadError(null);
+
     try {
       const tags = tagsInput
         .split(',')
@@ -137,28 +147,29 @@ export function UploadModal({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-cloudinary-cloud-name': config.cloudName,
-          ...(config.apiKey ? { 'x-cloudinary-api-key': config.apiKey } : {}),
-          ...(config.apiSecret ? { 'x-cloudinary-api-secret': config.apiSecret } : {}),
         },
         body: JSON.stringify({
           file: imageUrl.trim(),
           folder: folder || 'General',
           tags,
           filename: 'imported_asset',
+          isDemoMode: isDemo,
         }),
       });
 
       const data = await res.json();
       if (res.ok && data.asset) {
-        toast('Asset imported successfully from URL', 'success');
+        toast(data.message || 'Asset imported successfully', 'success');
         onAssetUploaded(data.asset);
         handleClose();
       } else {
+        setUploadError(data.error || 'Failed to import URL');
         toast(data.error || 'Failed to import URL', 'error');
       }
     } catch (err: unknown) {
-      toast((err as Error)?.message || 'Error importing URL', 'error');
+      const msg = (err as Error)?.message || 'Error importing URL';
+      setUploadError(msg);
+      toast(msg, 'error');
     } finally {
       setIsUploading(false);
     }
@@ -168,6 +179,7 @@ export function UploadModal({
     setSelectedFile(null);
     setPreviewUrl(null);
     setImageUrl('');
+    setUploadError(null);
     setIsUploading(false);
     onClose();
   };
@@ -182,8 +194,17 @@ export function UploadModal({
               <UploadCloud className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold tracking-tight">Upload Media Asset</h2>
-              <p className="text-xs text-muted-foreground">Ingest assets directly into CloudPix DAM</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold tracking-tight">Upload Media Asset</h2>
+                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-medium ${isDemo ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                  {isDemo ? 'Demo Mode' : `Cloud: ${config.cloudName}`}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {isDemo 
+                  ? 'Add assets to the interactive demo session' 
+                  : `Ingest directly into your personal '${config.cloudName}' Cloudinary storage`}
+              </p>
             </div>
           </div>
           <button
@@ -193,6 +214,28 @@ export function UploadModal({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Meaningful configuration error banner if needed */}
+        {uploadError && (
+          <div className="mx-5 mt-4 p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-500 text-xs flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{uploadError}</span>
+            </div>
+            {onOpenSettings && (
+              <button
+                type="button"
+                onClick={() => {
+                  handleClose();
+                  onOpenSettings();
+                }}
+                className="underline font-medium hover:text-rose-400 shrink-0 text-[11px]"
+              >
+                Settings
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Tab switch */}
         <div className="px-5 pt-4">
@@ -337,7 +380,7 @@ export function UploadModal({
                 ) : (
                   <>
                     <UploadCloud className="w-3.5 h-3.5" />
-                    Upload Asset
+                    {isDemo ? 'Upload to Demo Session' : 'Upload to Cloudinary'}
                   </>
                 )}
               </button>

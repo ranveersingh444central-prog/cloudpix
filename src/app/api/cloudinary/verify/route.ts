@@ -1,123 +1,180 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
 import { VerificationResult } from '@/types/cloudinary';
+import { parseSessionCookie } from '@/lib/session';
 
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
 
   try {
     const body = await req.json().catch(() => ({}));
-    
-    // Check credentials from request body, headers, or environment variables
-    const cloudName = 
-      body.cloudName || 
-      req.headers.get('x-cloudinary-cloud-name') || 
-      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 
-      process.env.CLOUDINARY_CLOUD_NAME || 
-      'demo';
+    const sessionCookie = parseSessionCookie(req);
 
-    const apiKey = 
-      body.apiKey || 
-      req.headers.get('x-cloudinary-api-key') || 
-      process.env.CLOUDINARY_API_KEY;
+    // 1. Resolve cloud name
+    const requestedCloud = body.cloudName?.trim();
+    const isExplicitDemo = body.isDemoMode === true || requestedCloud === 'demo';
 
-    const apiSecret = 
-      body.apiSecret || 
-      req.headers.get('x-cloudinary-api-secret') || 
-      process.env.CLOUDINARY_API_SECRET;
-
-    // Case 1: Live Cloudinary account with API Key & Secret
-    if (apiKey && apiSecret && cloudName !== 'demo') {
-      cloudinary.config({
-        cloud_name: cloudName,
-        api_key: apiKey,
-        api_secret: apiSecret,
-        secure: true,
-      });
-
-      // Execute ping
-      const pingResult = await cloudinary.api.ping();
+    if (isExplicitDemo) {
+      // Connect to demo mode & clear any active personal session cookie
+      const testUrl = 'https://res.cloudinary.com/demo/image/upload/sample.jpg';
+      const cdnRes = await fetch(testUrl, { method: 'HEAD', cache: 'no-store' });
       const latencyMs = Date.now() - startTime;
 
-      // Optional: Fetch usage stats if available
-      let usageDetails: VerificationResult['details'] = undefined;
-      try {
-        const usage = await cloudinary.api.usage();
-        usageDetails = {
-          plan: usage.plan || 'Free / Developer',
-          creditsUsage: usage.credits ? Math.round((usage.credits.usage / usage.credits.limit) * 100) : undefined,
-          storageFormatted: usage.storage?.usage ? `${(usage.storage.usage / (1024 * 1024)).toFixed(1)} MB` : undefined,
-          transformationsFormatted: usage.transformations?.usage ? `${usage.transformations.usage.toLocaleString()} / ${usage.transformations.limit?.toLocaleString() || '∞'}` : undefined,
-        };
-      } catch {
-        // Usage endpoint may require admin privileges, ping alone is sufficient
-      }
-
       const result: VerificationResult = {
-        connected: pingResult.status === 'ok',
-        cloudName,
-        accountType: 'live',
+        connected: cdnRes.ok,
+        cloudName: 'demo',
+        accountType: 'demo',
         latencyMs,
-        statusMessage: `Authenticated & operational on Cloudinary '${cloudName}'`,
+        statusMessage: 'Cloudinary Demo Sandbox active. Transformations execute on global demo CDN.',
         checkedAt: new Date().toISOString(),
-        details: usageDetails,
-      };
-
-      return NextResponse.json(result);
-    }
-
-    // Case 2: Demo or Public CDN mode (cloudName provided without secret, e.g. 'demo' or custom public cloud)
-    const testUrl = `https://res.cloudinary.com/${cloudName}/image/upload/sample.jpg`;
-    const cdnResponse = await fetch(testUrl, { method: 'HEAD', cache: 'no-store' });
-    const latencyMs = Date.now() - startTime;
-
-    if (cdnResponse.ok) {
-      const result: VerificationResult = {
-        connected: true,
-        cloudName,
-        accountType: cloudName === 'demo' ? 'demo' : 'live',
-        latencyMs,
-        statusMessage: cloudName === 'demo' 
-          ? 'Cloudinary Demo CDN active with full dynamic transformations enabled'
-          : `Cloudinary CDN active for cloud '${cloudName}'`,
-        checkedAt: new Date().toISOString(),
+        hasServerEnv: Boolean(process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
         details: {
-          plan: cloudName === 'demo' ? 'Cloudinary Demo Cloud' : 'Public CDN Access',
-          transformationsFormatted: 'Uncapped Dynamic Transforms',
+          plan: 'Cloudinary Demo Cloud',
+          transformationsFormatted: 'Uncapped Sandbox Transforms',
         },
       };
 
-      return NextResponse.json(result);
-    } else {
+      const res = NextResponse.json(result);
+      res.cookies.delete('cld_session');
+      return res;
+    }
+
+    // 2. Personal Mode: Resolve credentials from body (new entry), env variables (server config), or secure session cookie
+    const cloudName = 
+      requestedCloud || 
+      process.env.CLOUDINARY_CLOUD_NAME || 
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 
+      sessionCookie?.cloudName;
+
+    if (!cloudName) {
+      return NextResponse.json(
+        {
+          connected: false,
+          cloudName: '',
+          accountType: 'live',
+          latencyMs: 0,
+          statusMessage: 'Configuration missing: Cloud Name is required.',
+          checkedAt: new Date().toISOString(),
+        },
+        { status: 400 }
+      );
+    }
+
+    const apiKey = 
+      body.apiKey?.trim() || 
+      process.env.CLOUDINARY_API_KEY || 
+      sessionCookie?.apiKey;
+
+    const apiSecret = 
+      body.apiSecret?.trim() || 
+      process.env.CLOUDINARY_API_SECRET || 
+      sessionCookie?.apiSecret;
+
+    // Meaningful error when credentials missing for a personal account
+    if (!apiKey || !apiSecret) {
+      return NextResponse.json(
+        {
+          connected: false,
+          cloudName,
+          accountType: 'live',
+          latencyMs: 0,
+          statusMessage: `Personal account '${cloudName}' requires both API Key and API Secret to authenticate. Configure them in Settings or set CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET in server environment.`,
+          checkedAt: new Date().toISOString(),
+          hasServerEnv: false,
+        },
+        { status: 400 }
+      );
+    }
+
+    // 3. Authenticate with Cloudinary SDK
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret,
+      secure: true,
+    });
+
+    const pingResult = await cloudinary.api.ping();
+    const latencyMs = Date.now() - startTime;
+
+    if (pingResult.status !== 'ok') {
       return NextResponse.json(
         {
           connected: false,
           cloudName,
           accountType: 'live',
           latencyMs,
-          statusMessage: `Cloudinary returned HTTP status ${cdnResponse.status} for cloud '${cloudName}'. Verify that the cloud name exists.`,
+          statusMessage: `Cloudinary ping failed for cloud '${cloudName}'. Verify that your credentials are valid.`,
           checkedAt: new Date().toISOString(),
         },
-        { status: 400 }
+        { status: 401 }
       );
     }
+
+    // 4. Optionally fetch usage stats for personal account
+    let usageDetails: VerificationResult['details'] = undefined;
+    try {
+      const usage = await cloudinary.api.usage();
+      usageDetails = {
+        plan: usage.plan || 'Developer / Production',
+        creditsUsage: usage.credits ? Math.round((usage.credits.usage / usage.credits.limit) * 100) : undefined,
+        storageFormatted: usage.storage?.usage ? `${(usage.storage.usage / (1024 * 1024)).toFixed(1)} MB` : undefined,
+        transformationsFormatted: usage.transformations?.usage 
+          ? `${usage.transformations.usage.toLocaleString()} / ${usage.transformations.limit ? usage.transformations.limit.toLocaleString() : 'Unlimited'}` 
+          : undefined,
+      };
+    } catch {
+      // Usage endpoint might be restricted depending on role, ping is sufficient
+    }
+
+    const result: VerificationResult = {
+      connected: true,
+      cloudName,
+      accountType: 'live',
+      latencyMs,
+      statusMessage: `Personal Cloudinary cloud '${cloudName}' authenticated and operational.`,
+      checkedAt: new Date().toISOString(),
+      hasServerEnv: Boolean(process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
+      details: usageDetails,
+    };
+
+    const res = NextResponse.json(result);
+
+    // Securely persist credentials in httpOnly cookie only (NEVER expose to client JS/localStorage)
+    if (body.apiKey && body.apiSecret) {
+      const sessionPayload = JSON.stringify({
+        cloudName,
+        apiKey: body.apiKey.trim(),
+        apiSecret: body.apiSecret.trim(),
+      });
+      const encoded = Buffer.from(sessionPayload).toString('base64');
+      res.cookies.set('cld_session', encoded, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+      });
+    }
+
+    return res;
   } catch (error: unknown) {
     const latencyMs = Date.now() - startTime;
+    const msg = (error as Error)?.message || 'Failed to authenticate with Cloudinary';
     return NextResponse.json(
       {
         connected: false,
-        cloudName: 'unknown',
+        cloudName: 'error',
         accountType: 'live',
         latencyMs,
-        statusMessage: (error as Error)?.message || 'Failed to connect to Cloudinary endpoint',
+        statusMessage: `Cloudinary error: ${msg}`,
         checkedAt: new Date().toISOString(),
       },
-      { status: 500 }
+      { status: 400 }
     );
   }
 }
 
 export async function GET(req: NextRequest) {
-  // Allow GET as a quick healthcheck
   return POST(req);
 }
